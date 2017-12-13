@@ -26,11 +26,11 @@ import qualified Data.Vinyl.TypeLevel as V
 import qualified GHC.Generics as G
 import           GHC.Generics ((:*:)(..))
 
--- | noitacilppa rotcurtsnoc epyt desreveR
-newtype Ylppa (x :: k) (f :: k -> *) = Ylppa { unYlppa :: f x }
+-- | FlipApply x f ~ f x
+newtype FlipApply (x :: k) (f :: k -> *) = FlipApply { unFlipApply :: f x }
 
 -- Handlers m '[e1, e2, e3] ~ (e1 m, e2 m, e3 m)
-type Handlers m es = V.Rec (Ylppa m) es
+type Handlers m es = V.Rec (FlipApply m) es
 
 newtype Eff (es :: [(* -> *) -> *]) a =
   Eff { unEff :: forall (m :: * -> *). Monad m => R.ReaderT (Handlers m es) m a }
@@ -51,7 +51,7 @@ runEff handlers (Eff m) = R.runReaderT m handlers
 withHandler :: forall e es a. Has e es => (forall m. Monad m => e m -> m a) -> Eff es a
 withHandler f = Eff $ do
   es <- R.ask
-  R.lift $ f $ unYlppa $ rget' es
+  R.lift $ f $ unFlipApply $ rget' es
 
 --------------------------------------------------------------------------------
 
@@ -91,7 +91,7 @@ instance (GLiftNat n m f1 g1, GLiftNat n m f2 g2)
 withEffect :: Effect e => e (Eff es) -> Eff (e ': es) a -> Eff es a
 withEffect e (Eff m) = Eff $ do
   es <- R.ask
-  R.lift $ R.runReaderT m (Ylppa (liftNat (flip R.runReaderT es . unEff) e) :& es)
+  R.lift $ R.runReaderT m (FlipApply (liftNat (flip R.runReaderT es . unEff) e) :& es)
 
 class Has r rs where
   rget' :: V.Rec f rs -> f r
@@ -165,7 +165,14 @@ foo = do
 runFoo :: Int
 runFoo =
   flip S.execState 5 $
-  runEff (Ylppa mtlState :& V.RNil) $
+
+  -- Use mtl's MonadState as State Int effect
+  runEff (FlipApply mtlState :& V.RNil) $
+
+  -- Provide Reader Int based on State Int
   withEffect (readOnlyState (Proxy :: Proxy Int)) $
+
+  -- Provide Reader String based in Reader String
   withEffect (zoomReader (show :: Int -> String)) $
+
   foo
