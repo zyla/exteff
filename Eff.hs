@@ -96,7 +96,7 @@ withEffect e (Eff m) = Eff $ do
 class Has r rs where
   rget' :: V.Rec f rs -> f r
 
-instance {-# INCOHERENT #-} Has r (r ': rs) where
+instance {-# OVERLAPPING #-} Has r (r ': rs) where
   rget' (x :& _) = x
 
 instance Has r rs => Has r (x ': rs) where
